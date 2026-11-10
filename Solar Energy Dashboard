@@ -1,367 +1,590 @@
-
+import 'dart:math';
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const SolarApp());
+void main() => runApp(const SolarApp());
+
+const darkGreen = Color(0xFF14532D);
+const lightGreen = Color(0xFFF1F8F3);
+
+class SolarApp extends StatefulWidget {
+  const SolarApp({super.key});
+  @override
+  State<SolarApp> createState() => _SolarAppState();
 }
 
-class SolarApp extends StatelessWidget {
-  const SolarApp({super.key});
+class _SolarAppState extends State<SolarApp> {
+  bool dark = false;
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'SolarSense',
-      theme: ThemeData(
-        colorSchemeSeed: Colors.green,
-        useMaterial3: true,
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+    theme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: darkGreen),
+      scaffoldBackgroundColor: lightGreen,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: darkGreen,
+        foregroundColor: Colors.white,
       ),
-      home: const Dashboard(),
-    );
-  }
+      useMaterial3: true,
+    ),
+    darkTheme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: darkGreen,
+        brightness: Brightness.dark,
+      ),
+      useMaterial3: true,
+    ),
+    home: Dashboard(
+      dark: dark,
+      onTheme: (v) => setState(() => dark = v),
+    ),
+  );
 }
 
 class Dashboard extends StatefulWidget {
-  const Dashboard({super.key});
+  final bool dark;
+  final ValueChanged<bool> onTheme;
+  const Dashboard({super.key, required this.dark, required this.onTheme});
 
   @override
   State<Dashboard> createState() => _DashboardState();
 }
 
 class _DashboardState extends State<Dashboard> {
-  int selected = 0;
-  bool weekly = false;
-  int generation = 24;
-  bool notifications = true;
+  int page = 0;
+  double generated = 24.5, consumed = 15.2, battery = 78, exported = 4.3;
+
+  double get savings => consumed * 8;
+  double get co2 => generated * 0.82;
+  double get trees => co2 / 21;
+  double get backup => battery * 0.06;
+
+  void refresh() {
+    setState(() {
+      generated = 26.8;
+      consumed = 17.1;
+      exported = 3.7;
+      battery = 85;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Demo data refreshed!')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      HomePage(
+        generated: generated, consumed: consumed, battery: battery,
+        exported: exported, savings: savings, co2: co2,
+        trees: trees, backup: backup, onRefresh: refresh,
+      ),
+      const AnalyticsPage(),
+      AlertsPage(battery: battery, generated: generated, consumed: consumed),
+      SettingsPage(
+        dark: widget.dark,
+        onTheme: widget.onTheme,
+        battery: battery,
+        onBattery: (v) => setState(() => battery = v),
+      ),
+    ];
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SolarSense ☀️'),
+        title: const Row(children: [
+          Icon(Icons.solar_power),
+          SizedBox(width: 8),
+          Text('SolarSense', style: TextStyle(fontWeight: FontWeight.bold)),
+        ]),
         actions: [
           IconButton(
-            onPressed: () => setState(() => generation += 2),
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () => setState(() => page = 2),
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          int columns = constraints.maxWidth < 500
-              ? 1
-              : constraints.maxWidth < 850
-                  ? 2
-                  : 4;
-
-          
-if (selected != 0) {
-  return Center(
-    child: Card(
-      margin: const EdgeInsets.all(20),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              [
-                Icons.dashboard,
-                Icons.analytics,
-                Icons.battery_full,
-                Icons.settings
-              ][selected],
-              size: 50,
-              color: Colors.green,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              [
-                'Dashboard',
-                'Energy Analytics',
-                'Battery Status',
-                'Settings'
-              ][selected],
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            if (selected == 1) ...[
-              const Text('Daily Generation: 24 kWh'),
-              const Text('Energy Consumption: 18 kWh'),
-              const Text('CO₂ Saved: 12 kg'),
-            ] else if (selected == 2) ...[
-              const Text('Battery Level: 85%'),
-              const Text('Battery Status: Charging'),
-              const Text('System Status: Normal'),
-              const SizedBox(height: 10),
-              const LinearProgressIndicator(value: 0.85),
-            ] else if (selected == 3) ...[
-              const Text('SolarSense Settings'),
-              SwitchListTile(
-                title: const Text('Notifications'),
-                value: notifications,
-                onChanged: (value) {
-                  setState(() => notifications = value);
-                },
-              ),
-            ],
-          ],
-        ),
+      body: IndexedStack(index: page, children: pages),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: page,
+        onDestinationSelected: (v) => setState(() => page = v),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.analytics_outlined), label: 'Analytics'),
+          NavigationDestination(icon: Icon(Icons.notifications_outlined), label: 'Alerts'),
+          NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Settings'),
+        ],
       ),
-    ),
-  );
+    );
+  }
 }
 
+// HOME PAGE
 
-          return SingleChildScrollView(
+class HomePage extends StatelessWidget {
+  final double generated, consumed, battery, exported, savings, co2, trees, backup;
+  final VoidCallback onRefresh;
+
+  const HomePage({
+    super.key, required this.generated, required this.consumed,
+    required this.battery, required this.exported, required this.savings,
+    required this.co2, required this.trees, required this.backup,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final status = battery <= 20 ? 'Low Battery' :
+        battery >= 80 ? 'Charging' : 'Discharging';
+
+    return RefreshIndicator(
+      onRefresh: () async => onRefresh(),
+      child: ListView(padding: const EdgeInsets.all(16), children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Welcome!', style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+            Text('Your solar energy overview'),
+          ]),
+          IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+        ]),
+        const SizedBox(height: 20),
+        const Heading('Energy Overview'),
+        GridView.count(
+          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2, childAspectRatio: 1.4,
+          crossAxisSpacing: 12, mainAxisSpacing: 12,
+          children: [
+            Metric('Generated', '$generated kWh', Icons.solar_power, Colors.orange),
+            Metric('Consumed', '$consumed kWh', Icons.bolt, Colors.blue),
+            Metric('Battery', '${battery.toInt()}%', Icons.battery_full, Colors.green),
+            Metric('Exported', '$exported kWh', Icons.electric_meter, Colors.purple),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Heading('Energy Distribution'),
+        Card(child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            EnergyLine('Generated', generated, Colors.green),
+            EnergyLine('Consumed', consumed, Colors.blue),
+            EnergyLine('Exported', exported, Colors.orange),
+          ]),
+        )),
+        const SizedBox(height: 20),
+        const Heading('Battery Monitoring'),
+        Card(child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Battery Level'),
+              Text('${battery.toInt()}%', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ]),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: battery / 100, minHeight: 10,
+              color: battery <= 20 ? Colors.red : Colors.green,
+            ),
+            const SizedBox(height: 12),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Status'), Text(status),
+            ]),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Estimated Backup'),
+              Text('${backup.toStringAsFixed(1)} hours'),
+            ]),
+          ]),
+        )),
+        const SizedBox(height: 20),
+        const Heading('Cost Savings'),
+        InfoTile(Icons.currency_rupee, 'Daily Savings', '₹${savings.toStringAsFixed(2)}'),
+        InfoTile(Icons.calendar_month, 'Monthly Savings', '₹${(savings * 30).toStringAsFixed(0)}'),
+        const SizedBox(height: 20),
+        const Heading('Environmental Impact'),
+        InfoTile(Icons.eco, 'CO₂ Emissions Avoided', '${co2.toStringAsFixed(1)} kg'),
+        InfoTile(Icons.park, 'Tree Equivalent', '${trees.toStringAsFixed(2)} trees'),
+        const Card(child: ListTile(
+          leading: Icon(Icons.wb_sunny, color: Colors.orange),
+          title: Text('Weather Overview'),
+          subtitle: Text('Sunny - Sample weather data'),
+        )),
+        const SizedBox(height: 20),
+        const SDGSection(),
+      ]),
+    );
+  }
+}
+
+// EXPANDED SDG 7 SECTION
+
+class SDGSection extends StatelessWidget {
+  const SDGSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            color: const Color(0xFF14532D),
+            padding: const EdgeInsets.all(20),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('UNITED NATIONS',
+                    style: TextStyle(color: Colors.white70, fontSize: 11)),
+                SizedBox(height: 10),
+                Text('SDG 7',
+                    style: TextStyle(color: Colors.white, fontSize: 30,
+                        fontWeight: FontWeight.bold)),
+                Text('AFFORDABLE AND CLEAN ENERGY',
+                    style: TextStyle(color: Colors.white, fontSize: 15,
+                        fontWeight: FontWeight.bold)),
+                SizedBox(height: 8),
+                Text('Ensuring access to affordable, reliable, sustainable and modern energy for all.',
+                    style: TextStyle(color: Colors.white70)),
+              ],
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Energy Dashboard',
-                    style: TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-
-                GridView.count(
-                  crossAxisCount: columns,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.5,
-                  children: [
-                    energyCard('Generation', '$generation kWh',
-                        Icons.solar_power, Colors.orange),
-                    energyCard('Consumption', '18 kWh',
-                        Icons.bolt, Colors.blue),
-                    energyCard('Battery', '85%',
-                        Icons.battery_charging_full, Colors.green),
-                    energyCard('CO₂ Saved', '12 kg',
-                        Icons.eco, Colors.teal),
-                  ],
+                const Text('How SolarSense Supports SDG 7',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                const SDGPoint(Icons.solar_power, 'Clean Energy',
+                    'Encourages the use of renewable solar power.'),
+                const SDGPoint(Icons.bolt, 'Energy Efficiency',
+                    'Helps users understand energy generation and consumption.'),
+                const SDGPoint(Icons.currency_rupee, 'Affordable Energy',
+                    'Displays estimated electricity cost savings.'),
+                const SDGPoint(Icons.eco, 'Environmental Protection',
+                    'Shows estimated CO₂ emissions avoided through solar energy.'),
+                const SDGPoint(Icons.lightbulb, 'Energy Awareness',
+                    'Provides insights to support responsible energy usage.'),
+                const Divider(height: 28),
+                const Text('Project Contribution',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text(
+                  'SolarSense creates awareness about renewable energy by '
+                  'presenting solar generation, consumption, battery status '
+                  'and environmental impact in one dashboard.',
                 ),
-
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Energy Overview',
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold)),
-                    DropdownButton<bool>(
-                      value: weekly,
-                      items: const [
-                        DropdownMenuItem(
-                            value: false, child: Text('Daily')),
-                        DropdownMenuItem(
-                            value: true, child: Text('Weekly')),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => weekly = value!),
-                    ),
-                  ],
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.energy_savings_leaf, color: Colors.green, size: 30),
+                    SizedBox(width: 10),
+                    Expanded(child: Text(
+                      'A step towards a cleaner and more sustainable future.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    )),
+                  ]),
                 ),
-
-                SizedBox(
-                  height: 180,
-                  child: CustomPaint(
-                    painter: EnergyChart(weekly),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.check_circle,
-                        color: Colors.green),
-                    title: const Text('Solar System Status'),
-                    subtitle: const Text('System working normally'),
-                  ),
-                ),
-
-               
-Card(
-  elevation: 3,
-  shape: RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(18),
-  ),
-  clipBehavior: Clip.antiAlias,
-  child: Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [
-          Colors.green.shade700,
-          Colors.green.shade400,
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(
-                Icons.wb_sunny,
-                color: Colors.green,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SDG 7',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
-                  Text(
-                    'Affordable and Clean Energy',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.eco,
-              color: Colors.white,
-              size: 30,
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        const Text(
-          'Promoting renewable energy for a cleaner '
-          'and more sustainable future.',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-Row(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    const Icon(
-      Icons.bolt,
-      color: Colors.white,
-    ),
-    const SizedBox(width: 8),
-    const Expanded(
-      child: Text(
-        'Clean energy starts with solar power!',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    ),
-  ],
-),
-
-      ],
-    ),
-  ),
-),
-
               ],
             ),
-          );
-        },
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selected,
-        onDestinationSelected: (index) =>
-            setState(() => selected = index),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.dashboard), label: 'Home'),
-          NavigationDestination(
-              icon: Icon(Icons.analytics), label: 'Analytics'),
-          NavigationDestination(
-              icon: Icon(Icons.battery_full), label: 'Battery'),
-          NavigationDestination(
-              icon: Icon(Icons.settings), label: 'Settings'),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget energyCard(
-      String title, String value, IconData icon, Color color) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 30),
-            const SizedBox(height: 8),
-            Text(title, textAlign: TextAlign.center),
-            Text(value,
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
       ),
     );
   }
 }
 
-class EnergyChart extends CustomPainter {
-  final bool weekly;
-  EnergyChart(this.weekly);
+class SDGPoint extends StatelessWidget {
+  final IconData icon;
+  final String title, description;
+  const SDGPoint(this.icon, this.title, this.description, {super.key});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.green
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(icon, color: Colors.green, size: 25),
+      const SizedBox(width: 12),
+      Expanded(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(description),
+        ],
+      )),
+    ]),
+  );
+}
 
-    final points = weekly
-        ? [0.8, 0.5, 0.65, 0.3, 0.45, 0.2, 0.35]
-        : [0.7, 0.4, 0.6, 0.25, 0.5, 0.3];
+// ANALYTICS PAGE
 
-    final path = Path();
+class AnalyticsPage extends StatefulWidget {
+  const AnalyticsPage({super.key});
+  @override
+  State<AnalyticsPage> createState() => _AnalyticsPageState();
+}
 
-    for (int i = 0; i < points.length; i++) {
-      final x = i * size.width / (points.length - 1);
-      final y = points[i] * size.height;
+class _AnalyticsPageState extends State<AnalyticsPage> {
+  String period = 'Weekly';
+  final data = {
+    'Daily': [[3, 5, 4, 7, 6, 8, 5], [2, 4, 3, 5, 4, 6, 3]],
+    'Weekly': [[5, 7, 6, 9, 8, 10, 7], [3, 5, 4, 6, 5, 7, 4]],
+    'Monthly': [[6, 8, 7, 10, 9, 12, 11], [4, 6, 5, 7, 6, 8, 5]],
+  };
 
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
+  @override
+  Widget build(BuildContext context) {
+    final g = data[period]![0], c = data[period]![1];
+    final totalG = g.reduce((a, b) => a + b);
+    final totalC = c.reduce((a, b) => a + b);
+
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Heading('Energy Analytics'),
+      const Text('Monitor generation and consumption trends.'),
+      const SizedBox(height: 18),
+      SegmentedButton<String>(
+        segments: const [
+          ButtonSegment(value: 'Daily', label: Text('Daily')),
+          ButtonSegment(value: 'Weekly', label: Text('Weekly')),
+          ButtonSegment(value: 'Monthly', label: Text('Monthly')),
+        ],
+        selected: {period},
+        onSelectionChanged: (v) => setState(() => period = v.first),
+      ),
+      const SizedBox(height: 20),
+      Card(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Generation vs Consumption',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          const Wrap(spacing: 15, children: [
+            Legend(Colors.green, 'Generated'),
+            Legend(Colors.orange, 'Consumed'),
+          ]),
+          const SizedBox(height: 25),
+          SizedBox(height: 190, child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(7, (i) => Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Bar(g[i], Colors.green), const SizedBox(width: 3),
+                  Bar(c[i], Colors.orange),
+                ]),
+                const SizedBox(height: 8),
+                Text('D${i + 1}', style: const TextStyle(fontSize: 11)),
+              ],
+            )),
+          )),
+          const Text('Sample energy values in kWh'),
+        ]),
+      )),
+      const SizedBox(height: 16),
+      Row(children: [
+        Expanded(child: Metric('Generated', '$totalG kWh', Icons.solar_power, Colors.green)),
+        const SizedBox(width: 10),
+        Expanded(child: Metric('Consumed', '$totalC kWh', Icons.bolt, Colors.orange)),
+      ]),
+      const SizedBox(height: 16),
+      InfoTile(Icons.trending_up, 'Peak Generation', '${g.reduce(max)} kWh is the highest sample value.'),
+      InfoTile(Icons.compare_arrows, 'Energy Comparison',
+          'Generation exceeds consumption by ${totalG - totalC} kWh.'),
+    ]);
+  }
+}
+
+// SMART ALERTS
+
+class AlertsPage extends StatelessWidget {
+  final double battery, generated, consumed;
+  const AlertsPage({super.key, required this.battery,
+    required this.generated, required this.consumed});
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = <Widget>[];
+
+    if (battery <= 20) {
+      alerts.add(const AlertTile(Icons.battery_alert, 'Low Battery Warning',
+          'Battery level is below 20%.', Colors.red));
+    }
+    if (battery >= 80) {
+      alerts.add(const AlertTile(Icons.battery_full, 'Battery Almost Full',
+          'Battery level is above 80%.', Colors.green));
+    }
+    if (consumed > generated * 0.8) {
+      alerts.add(const AlertTile(Icons.warning, 'High Consumption',
+          'Consumption is close to generation.', Colors.orange));
+    }
+    if (generated >= 25) {
+      alerts.add(const AlertTile(Icons.emoji_events, 'Generation Goal Reached',
+          'Your sample daily generation goal is achieved.', Colors.green));
+    }
+    if (alerts.isEmpty) {
+      alerts.add(const AlertTile(Icons.check_circle, 'System Normal',
+          'No critical alerts in the current demo.', Colors.green));
     }
 
-    canvas.drawPath(path, paint);
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      const Heading('Smart Alerts'),
+      const Text('Notifications based on energy conditions.'),
+      const SizedBox(height: 18),
+      ...alerts,
+      const Text('Alerts are generated using sample values.',
+          style: TextStyle(fontSize: 12)),
+    ]);
   }
+}
+
+// SETTINGS PAGE
+
+class SettingsPage extends StatelessWidget {
+  final bool dark;
+  final ValueChanged<bool> onTheme;
+  final double battery;
+  final ValueChanged<double> onBattery;
+
+  const SettingsPage({super.key, required this.dark, required this.onTheme,
+    required this.battery, required this.onBattery});
 
   @override
-  bool shouldRepaint(covariant EnergyChart oldDelegate) =>
-      oldDelegate.weekly != weekly;
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(16),
+    children: [
+      const Heading('Settings'),
+      Card(child: SwitchListTile(
+        secondary: const Icon(Icons.dark_mode),
+        title: const Text('Dark Mode'),
+        value: dark, onChanged: onTheme,
+      )),
+      Card(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Demo Battery Control',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          Text('Battery: ${battery.toInt()}%'),
+          Slider(value: battery, min: 0, max: 100, divisions: 20,
+            label: '${battery.toInt()}%', onChanged: onBattery),
+          const Text('Change battery to test smart alerts.',
+              style: TextStyle(fontSize: 12)),
+        ]),
+      )),
+      const InfoTile(Icons.info_outline, 'About SolarSense',
+          'Solar Energy Monitoring Dashboard'),
+      const InfoTile(Icons.school, 'Technology', 'Flutter and Dart'),
+      const InfoTile(Icons.eco, 'SDG 7', 'Affordable and Clean Energy'),
+    ],
+  );
+}
+
+// REUSABLE WIDGETS
+
+class Heading extends StatelessWidget {
+  final String title;
+  const Heading(this.title, {super.key});
+  @override
+  Widget build(BuildContext context) => Text(title,
+      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold));
+}
+
+class Metric extends StatelessWidget {
+  final String title, value;
+  final IconData icon;
+  final Color color;
+  const Metric(this.title, this.value, this.icon, this.color, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Card(child: Padding(
+    padding: const EdgeInsets.all(12),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: color, size: 27),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(title, style: const TextStyle(fontSize: 12)),
+      ]),
+  ));
+}
+
+class InfoTile extends StatelessWidget {
+  final IconData icon;
+  final String title, subtitle;
+  const InfoTile(this.icon, this.title, this.subtitle, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Card(child: ListTile(
+    leading: Icon(icon, color: Colors.green),
+    title: Text(title), subtitle: Text(subtitle),
+  ));
+}
+
+class EnergyLine extends StatelessWidget {
+  final String title;
+  final double value;
+  final Color color;
+  const EnergyLine(this.title, this.value, this.color, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 9),
+    child: Row(children: [
+      Icon(Icons.circle, size: 12, color: color),
+      const SizedBox(width: 10),
+      Expanded(child: Text(title)),
+      Text('${value.toStringAsFixed(1)} kWh',
+          style: const TextStyle(fontWeight: FontWeight.bold)),
+    ]),
+  );
+}
+
+class AlertTile extends StatelessWidget {
+  final IconData icon;
+  final String title, message;
+  final Color color;
+  const AlertTile(this.icon, this.title, this.message, this.color, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(bottom: 12),
+    child: ListTile(
+      leading: Icon(icon, color: color, size: 30),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(message),
+    ),
+  );
+}
+
+class Legend extends StatelessWidget {
+  final Color color;
+  final String label;
+  const Legend(this.color, this.label, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(Icons.circle, size: 11, color: color),
+      const SizedBox(width: 5),
+      Text(label, style: const TextStyle(fontSize: 12)),
+    ]);
+}
+
+class Bar extends StatelessWidget {
+  final int value;
+  final Color color;
+  const Bar(this.value, this.color, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 13, height: max(4, value * 12),
+    decoration: BoxDecoration(color: color,
+      borderRadius: BorderRadius.circular(5)),
+  );
 }
